@@ -1,0 +1,83 @@
+name: Build and Release ushit APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ushit.apk
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: Build Android Release APK
+        run: |
+          gradle assembleRelease --stacktrace
+
+      - name: Prepare APK Output
+        run: |
+          mkdir -p dist
+          # Find the generated release APK
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Release APK not found, checking debug build..."
+            gradle assembleDebug
+            APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          fi
+          echo "Found APK at: $APK_PATH"
+          cp "$APK_PATH" dist/ushit.apk
+          echo "Copied APK to dist/ushit.apk"
+
+      - name: Upload APK as Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ushit-apk
+          path: dist/ushit.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0
+          name: "ushit v1.0.0 (Release APK)"
+          body: |
+            ## 📱 ushit — Minimalist & Aesthetic Block Notes
+            
+            Reverse-engineered from Notion's core block architecture with zero bloat and instant local-first speed.
+            
+            ### ✨ Features
+            - **Block-Based Engine:** Polymorphic blocks (Heading 1-3, Checkbox/To-do, Bullets, Quotes, Callout boxes, Monospace Code, Dividers).
+            - **Slash Commands:** Type `/` to open the inline block picker.
+            - **Aesthetic Minimalist UI:** Warm graphite dark theme and ceramic paper light theme.
+            - **Zero Clutter:** No overwhelming menus, no complex relational database bloat.
+            - **Offline-First:** Instant persistence with zero latency.
+            - **Export Options:** One-click export to Markdown (`.md`) and full JSON backup.
+            
+            ### 📥 Download & Install
+            Download **`ushit.apk`** below and install it directly on your Android phone!
+          files: dist/ushit.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
